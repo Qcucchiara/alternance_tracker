@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  --color-positif: #22c55e;
+  --color-ambigu: #facc15;
+  --color-relance: #3b82f6;
+  --color-pas-repondu: #9ca3af;
+  --color-negatif: #ef4444;
+}
+
+/* Custom styles for MD Editor to fit the 960x1080 constraint */
+.wmde-markdown-var {
+  --wmde-markdown-font-size: 14px;
+}
+
+.w-md-editor {
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}

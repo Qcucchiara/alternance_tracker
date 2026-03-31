@@ -1,15 +1,13 @@
 {
   "name": "alternance-tracker",
+  "type": "module",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "main": "electron/main.cjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "concurrently \"vite\" \"pnpm electron:dev\"",
+    "electron:dev": "wait-on http://localhost:5173 && cross-env NODE_ENV=development ELECTRON_OZONE_PLATFORM_HINT=auto electron .",
+    "build": "vite build && electron-builder"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@10.33.0",
   "dependencies": {
     "@uiw/react-md-editor": "^4.1.0",
     "better-sqlite3": "^12.8.0",
@@ -19,6 +17,8 @@
     "react-router-dom": "^7.13.2"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
+    "@tailwindcss/postcss": "^4.2.2",
     "@tailwindcss/typography": "^0.5.19",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.27",
