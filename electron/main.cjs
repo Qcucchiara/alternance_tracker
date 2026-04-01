@@ -363,10 +363,34 @@ ipcMain.handle('get-company', (event, id) => {
     return { ...company, contacts };
 });
 
-ipcMain.handle('update-company-accueil', (event, { id, email_accueil, contact_accueil, site_web, priority, categories }) => {
+ipcMain.handle('update-company-accueil', (event, { 
+    id, email_accueil, contact_accueil, site_web, priority, categories,
+    telephone, secteurs, effectifs_global, effectifs_inovallee, commune, description,
+    adresse, code_postal
+}) => {
     // Update company
-    const result = db.prepare('UPDATE companies SET email_accueil = ?, contact_accueil = ?, site_web = ?, priority = ?, categories = ? WHERE id = ?')
-        .run(email_accueil, contact_accueil, site_web, priority, categories, id);
+    const result = db.prepare(`
+        UPDATE companies 
+        SET email_accueil = ?, 
+            contact_accueil = ?, 
+            site_web = ?, 
+            priority = ?, 
+            categories = ?,
+            telephone = ?,
+            secteurs = ?,
+            effectifs_global = ?,
+            effectifs_inovallee = ?,
+            commune = ?,
+            description = ?,
+            adresse = ?,
+            code_postal = ?
+        WHERE id = ?
+    `).run(
+        email_accueil, contact_accueil, site_web, priority, categories,
+        telephone, secteurs, effectifs_global, effectifs_inovallee, commune, description,
+        adresse, code_postal,
+        id
+    );
     
     // Update global categories
     if (categories) {
@@ -428,11 +452,13 @@ ipcMain.handle('create-company', (event, company) => {
         INSERT INTO companies (
             nom, site_internet, site_web, adresse, code_postal, commune, 
             telephone, email_accueil, contact_accueil, categories, 
-            priority, favori, description, source_ajout, best_status
+            priority, favori, description, secteurs, effectifs_global, effectifs_inovallee,
+            source_ajout, best_status
         ) VALUES (
             @nom, @site_internet, @site_web, @adresse, @code_postal, @commune, 
             @telephone, @email_accueil, @contact_accueil, @categories, 
-            @priority, @favori, @description, 'manuel', 'neutre'
+            @priority, @favori, @description, @secteurs, @effectifs_global, @effectifs_inovallee,
+            'manuel', 'neutre'
         )
     `).run(company);
 

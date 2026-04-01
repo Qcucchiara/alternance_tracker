@@ -398,7 +398,15 @@ const CompanyPage = () => {
     contact_accueil: '',
     site_web: '',
     priority: 0,
-    categories: ''
+    categories: '',
+    telephone: '',
+    secteurs: '',
+    effectifs_global: '',
+    effectifs_inovallee: '',
+    commune: '',
+    adresse: '',
+    code_postal: '',
+    description: ''
   });
 
   const [allCategories, setAllCategories] = useState([]);
@@ -460,7 +468,15 @@ const CompanyPage = () => {
       contact_accueil: data.contact_accueil || '',
       site_web: data.site_web || '',
       priority: data.priority || 0,
-      categories: data.categories || ''
+      categories: data.categories || '',
+      telephone: data.telephone || '',
+      secteurs: data.secteurs || data.secteur_1 || '',
+      effectifs_global: data.effectifs_global || '',
+      effectifs_inovallee: data.effectifs_inovallee || '',
+      commune: data.commune || '',
+      adresse: data.adresse || '',
+      code_postal: data.code_postal || '',
+      description: data.description || ''
     });
 
     if (targetContactId) {
@@ -566,11 +582,77 @@ const CompanyPage = () => {
       {/* Zone 2 — Bloc Infos */}
       <div className="flex border-b shrink-0 h-48">
         <div className="w-[40%] bg-gray-50 p-4 border-r text-xs space-y-2 overflow-auto">
-          <p><strong>Secteur :</strong> {company.secteurs || company.secteur_1}</p>
-          <p><strong>Effectifs :</strong> {company.effectifs_global || '?'} (global)
-            · {company.effectifs_inovallee || '?'} (local)</p>
-          <p><strong>Commune :</strong> {company.commune} ({company.code_postal})</p>
-          
+          {isEditingInfos ? (
+            <div className="space-y-2">
+              <div>
+                <strong className="block text-[10px] text-gray-500 uppercase">Secteur :</strong>
+                <input
+                  type="text"
+                  className="w-full border-b border-gray-300 focus:border-blue-500 outline-none bg-transparent py-0.5"
+                  value={accueilForm.secteurs}
+                  onChange={e => updateAccueilField('secteurs', e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <strong className="block text-[10px] text-gray-500 uppercase">Eff. Global :</strong>
+                  <input
+                    type="text"
+                    className="w-full border-b border-gray-300 focus:border-blue-500 outline-none bg-transparent py-0.5"
+                    value={accueilForm.effectifs_global}
+                    onChange={e => updateAccueilField('effectifs_global', e.target.value)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <strong className="block text-[10px] text-gray-500 uppercase">Eff. Local :</strong>
+                  <input
+                    type="text"
+                    className="w-full border-b border-gray-300 focus:border-blue-500 outline-none bg-transparent py-0.5"
+                    value={accueilForm.effectifs_inovallee}
+                    onChange={e => updateAccueilField('effectifs_inovallee', e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <strong className="block text-[10px] text-gray-500 uppercase">Adresse :</strong>
+                <input
+                  type="text"
+                  className="w-full border-b border-gray-300 focus:border-blue-500 outline-none bg-transparent py-0.5"
+                  value={accueilForm.adresse}
+                  onChange={e => updateAccueilField('adresse', e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <strong className="block text-[10px] text-gray-500 uppercase">Code Postal :</strong>
+                  <input
+                    type="text"
+                    className="w-full border-b border-gray-300 focus:border-blue-500 outline-none bg-transparent py-0.5"
+                    value={accueilForm.code_postal}
+                    onChange={e => updateAccueilField('code_postal', e.target.value)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <strong className="block text-[10px] text-gray-500 uppercase">Commune :</strong>
+                  <input
+                    type="text"
+                    className="w-full border-b border-gray-300 focus:border-blue-500 outline-none bg-transparent py-0.5"
+                    value={accueilForm.commune}
+                    onChange={e => updateAccueilField('commune', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p><strong>Secteur :</strong> {accueilForm.secteurs || '?'}</p>
+              <p><strong>Effectifs :</strong> {accueilForm.effectifs_global || '?'} (global)
+                · {accueilForm.effectifs_inovallee || '?'} (local)</p>
+              <p><strong>Adresse :</strong> {accueilForm.adresse || '?'}</p>
+              <p><strong>Commune :</strong> {accueilForm.code_postal} {accueilForm.commune}</p>
+            </>
+          )}
+
           <div className="space-y-1">
             <strong>Catégories :</strong>
             {isEditingInfos ? (
@@ -607,17 +689,25 @@ const CompanyPage = () => {
             </p>
           )}
           <div className="mt-2 text-gray-600">
-            <strong>Description :</strong>{' '}
-            <span
-              className="cursor-help"
-              title={company.description || 'Aucune description'}
-            >
-                {company.description
-                  ? company.description.length > 1000
-                    ? company.description.slice(0, 1000) + '...'
-                    : company.description
-                  : 'Aucune description'}
-              </span>
+            <strong className="block text-[10px] text-gray-500 uppercase">Description :</strong>
+            {isEditingInfos ? (
+              <textarea
+                className="w-full mt-1 p-1 text-[10px] border rounded focus:border-blue-500 outline-none h-24 bg-white"
+                value={accueilForm.description}
+                onChange={e => updateAccueilField('description', e.target.value)}
+              />
+            ) : (
+              <span
+                className="cursor-help"
+                title={accueilForm.description || 'Aucune description'}
+              >
+                  {accueilForm.description
+                    ? accueilForm.description.length > 500
+                      ? accueilForm.description.slice(0, 500) + '...'
+                      : accueilForm.description
+                    : 'Aucune description'}
+                </span>
+            )}
           </div>
         </div>
         <div className="w-[60%] p-4 flex flex-col justify-between relative">
@@ -631,7 +721,16 @@ const CompanyPage = () => {
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm">
               <span className="w-32 font-semibold">Tél accueil :</span>
-              <span className="text-gray-600 font-mono">{company.telephone || 'Non renseigné'}</span>
+              {isEditingInfos ? (
+                <input
+                  type="text"
+                  className="flex-1 border-b focus:border-blue-500 outline-none font-mono"
+                  value={accueilForm.telephone}
+                  onChange={e => updateAccueilField('telephone', e.target.value)}
+                />
+              ) : (
+                <span className="text-gray-600 font-mono">{accueilForm.telephone || 'Non renseigné'}</span>
+              )}
             </div>
 
             <div className="flex items-center gap-2 text-sm">
@@ -870,7 +969,10 @@ const NewCompanyPage = () => {
     categories: '',
     priority: 5,
     favori: 0,
-    description: ''
+    description: '',
+    secteurs: '',
+    effectifs_global: '',
+    effectifs_inovallee: ''
   });
 
   const [allCategories, setAllCategories] = useState([]);
@@ -1018,6 +1120,38 @@ const NewCompanyPage = () => {
               />
               Marquer comme favori
             </label>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-6 bg-gray-50 p-4 rounded border">
+          <div>
+            <label className="block text-sm font-medium mb-1">Secteur(s)</label>
+            <input
+              type="text"
+              className="w-full border px-3 py-2 rounded bg-white"
+              value={form.secteurs}
+              onChange={e => setForm({...form, secteurs: e.target.value})}
+            />
+          </div>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">Eff. Global</label>
+              <input
+                type="text"
+                className="w-full border px-3 py-2 rounded bg-white"
+                value={form.effectifs_global}
+                onChange={e => setForm({...form, effectifs_global: e.target.value})}
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">Eff. Inovallée</label>
+              <input
+                type="text"
+                className="w-full border px-3 py-2 rounded bg-white"
+                value={form.effectifs_inovallee}
+                onChange={e => setForm({...form, effectifs_inovallee: e.target.value})}
+              />
+            </div>
           </div>
         </div>
 
