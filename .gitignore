@@ -1,3 +1,4 @@
 /node_modules/
 /dist/
+/dist-electron/
 /merged_classified_v2.json

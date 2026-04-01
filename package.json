@@ -3,10 +3,18 @@
   "type": "module",
   "version": "1.0.0",
   "main": "electron/main.cjs",
+  "author": {
+    "name": "Phost",
+    "email": "cucchiaraquentin@gmail.com"
+  },
   "scripts": {
     "dev": "concurrently \"vite\" \"pnpm electron:dev\"",
     "electron:dev": "wait-on http://localhost:5173 && cross-env NODE_ENV=development ELECTRON_OZONE_PLATFORM_HINT=auto electron .",
-    "build": "vite build && electron-builder"
+    "build": "vite build && electron-builder",
+    "build:linux": "vite build && electron-builder --linux",
+    "build:win": "vite build && electron-builder --win",
+    "build:mac": "vite build && electron-builder --mac",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "@uiw/react-md-editor": "^4.1.0",

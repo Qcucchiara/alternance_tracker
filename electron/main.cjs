@@ -1,4 +1,11 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+
+if (process.platform === 'linux') {
+    app.disableHardwareAcceleration();
+    app.commandLine.appendSwitch('ozone-platform', 'wayland');
+    app.commandLine.appendSwitch('disable-features', 'Vulkan');
+}
+
 console.log('Main process starting...');
 const path = require('path');
 const fs = require('fs');
@@ -535,11 +542,20 @@ function createWindow() {
         },
     });
 
-    if (process.env.NODE_ENV === 'development') {
+    win.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL) => {
+        console.error('did-fail-load:', { errorCode, errorDescription, validatedURL });
+    });
+
+    win.webContents.on('render-process-gone', (_, details) => {
+        console.error('render-process-gone:', details);
+    });
+
+    if (!app.isPackaged) {
         win.loadURL('http://localhost:5173');
         win.webContents.openDevTools();
     } else {
         win.loadFile(path.join(__dirname, '../dist/index.html'));
+        // win.webContents.openDevTools({ mode: 'detach' });
     }
 }
 

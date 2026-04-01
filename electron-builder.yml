@@ -1,0 +1,30 @@
+appId: com.alternance-tracker.app
+productName: Alternance Tracker
+copyright: Copyright © 2026
+
+directories:
+  output: dist-electron
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - merged_classified_v2.json
+  - package.json
+
+asar: true
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+
+win:
+  target: nsis
+
+mac:
+  target: dmg
+
+# Configuration pour better-sqlite3 (dépendance native)
+npmRebuild: true

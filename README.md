@@ -28,34 +28,56 @@ Application desktop locale pour organiser une campagne de recherche d'alternance
    pnpm build
    ```
 
-## 📦 Packaging et Installation (Linux)
+## 📦 Packaging et Installation
 
-L'application utilise `electron-builder` pour générer des paquets installables.
+L'application utilise `electron-builder` pour générer des paquets installables pour Linux, Windows et macOS.
 
 ### 1. Prérequis
 Assurez-vous d'avoir les outils de build nécessaires pour `better-sqlite3` (dépendance native) :
+
+**Sur Linux :**
 ```bash
 sudo apt-get install build-essential python3
 ```
 
-### 2. Builder l'application
-Pour générer l'exécutable et le paquet pour Linux :
+**Sur Windows :**
+Installez les outils de build via `npm install --global windows-build-tools` ou via Visual Studio (C++ desktop development).
+
+### 2. Icônes
+Les icônes de l'application se trouvent dans le dossier `build/`.
+- `icon.png` : Utilisé pour le build Linux.
+- `icon.ico` : Utilisé pour le build Windows (doit être généré si manquant).
+- `icon.icns` : Utilisé pour le build macOS (doit être généré si manquant).
+
+### 3. Builder l'application
+Selon votre plateforme cible :
+
 ```bash
+# Pour tout générer (selon l'OS actuel)
 pnpm build
+
+# Spécifiquement pour Linux
+pnpm build:linux
+
+# Spécifiquement pour Windows
+pnpm build:win
+
+# Spécifiquement pour macOS
+pnpm build:mac
 ```
 
-### 3. Installer et Lancer
-Après le build, les fichiers se trouvent dans le dossier `dist/` :
+### 4. Installer et Lancer (Linux)
+Après le build, les fichiers se trouvent dans le dossier `dist-electron/` :
 
 - **AppImage** (Recommandé) :
-  - Rendez le fichier exécutable : `chmod +x dist/alternance-tracker-*.AppImage`
-  - Lancez-le : `./dist/alternance-tracker-*.AppImage`
+  - Rendez le fichier exécutable : `chmod +x dist-electron/alternance-tracker-*.AppImage`
+  - Lancez-le : `./dist-electron/alternance-tracker-*.AppImage`
 - **Paquet .deb** (Debian/Ubuntu) :
-  - Installez-le : `sudo dpkg -i dist/alternance-tracker-*.deb`
+  - Installez-le : `sudo dpkg -i dist-electron/alternance-tracker-*.deb`
   - Lancez l'application depuis votre menu d'applications.
 
-### ⚠️ Note sur SQLite
-Si vous rencontrez une erreur liée à `better-sqlite3` au lancement de l'application packagée, forcez la reconstruction du module natif :
+### ⚠️ Note sur SQLite (better-sqlite3)
+Si vous rencontrez une erreur liée à `better-sqlite3` au lancement de l'application packagée, forcez la reconstruction du module natif pour Electron :
 ```bash
 pnpm exec electron-rebuild
 ```
