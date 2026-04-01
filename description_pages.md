@@ -27,12 +27,12 @@ Pleine largeur, deux lignes empilées.
 - Champ texte pleine largeur (moins le sélecteur de tri) : `[ 🔍 Rechercher une entreprise... ]`
 - Sélecteur de tri collé à droite du champ : `[ Trier par : Priorité ▾ ]`
 
-**Ligne 2 — Filtres statut**
-Série de boutons/cases à cocher alignés horizontalement, de gauche à droite :
-```
-[★ Favoris] [● Positif] [● Ambigu] [● Relance] [● À contacter] [● Pas répondu] [● Négatif]
-```
-Chaque filtre est cumulable (comportement checkbox). Un filtre actif est visuellement distinct (fond coloré ou bordure marquée).
+**Ligne 2 — Filtres statut et catégories**
+Deux sélecteurs dynamiques permettant de rechercher et de sélectionner plusieurs tags.
+- **Statuts** : Sélecteur de tags colorés selon le code couleur standard (Neutre, À contacter, Pas de réponse, Relance, En cours, Entretien, Positif, Négatif).
+- **Catégories** : Sélecteur de tags bleus basé sur les catégories existantes.
+Les tags sélectionnés sont cumulables et peuvent être supprimés individuellement.
+- **Favoris** : Un bouton `[★ Favoris]` permet d'isoler uniquement les entreprises marquées.
 
 ---
 
@@ -89,25 +89,20 @@ Barre horizontale pleine largeur.
 
 **Gauche vers droite :**
 ```
-[← Liste]   Schneider Electric   [● Positif]   ★ Favori
+[← Liste]   Schneider Electric   Priorité: 7   [● Positif]   ★ Favori
 ```
 - `[← Liste]` : bouton retour
 - Nom de l'entreprise : texte grand, gras
+- Priorité : badge d'affichage (lecture seule dans le header)
 - Badge `best_status` coloré
 - Bouton `[★ Favori]` ou `[☆ Favori]` selon état, toggle au clic
-
-**Extrême droite :**
-```
-🌐 schneider.com
-```
-Lien cliquable vers le site, affiché uniquement si renseigné.
 
 ---
 
 ### Zone 2 — Bloc infos
 Deux colonnes côte à côte, séparées par une ligne verticale ou un espace.
 
-**Colonne gauche — Infos lecture seule**
+**Colonne gauche — Infos et Catégories**
 Largeur ~40% de la zone. Fond légèrement différencié (gris clair).
 
 Contenu vertical :
@@ -115,26 +110,30 @@ Contenu vertical :
 Secteur     : Énergie / Industrie
 Effectifs   : 4 500 (global) · 120 (local)
 Commune     : Grenoble (38)
-Catégories  : [Ingénierie] [Énergie] [Grand groupe]
+Catégories  : [INGÉNIERIE] [ÉNERGIE]
+Annuaire    : [Lien fiche]
 Description : Acteur mondial de la gestion de l'énergie...
-              [voir plus]
 ```
-- Catégories affichées sous forme de tags
-- Description tronquée avec lien `[voir plus]`
+Catégories : Tags bleus. En mode édition (voir bouton Zone 2 droite), ils deviennent éditables via une liste de suggestions (datalist) basée sur les catégories existantes en base de données. Les nouvelles catégories sont automatiquement ajoutées à la liste globale.
+- Annuaire : Lien vers la fiche externe si disponible.
 
-**Colonne droite — Accueil**
-Largeur ~60%. Formulaire avec sauvegarde indépendante.
+**Colonne droite — Détails Éditables**
+Largeur ~60%. Contient les informations de contact accueil et le bouton de modification global.
 
 ```
+                    [✎ MODIFIER] / [✓ TERMINER]
+
 Téléphone accueil : 04 76 57 60 00      (lecture seule)
-Email accueil     : [accueil@schneider.com      ]
-Contact accueil   : [M. Dupont - standardiste   ]
-
-                               [💾 Sauver accueil]
+Email accueil     : accueil@schneider.com
+Contact accueil   : M. Dupont
+Site web          : 🌐 schneider.com
+Priorité          : [●] 7 / 10
 ```
-- Téléphone : affiché en lecture seule, importé du CSV
-- Email et contact accueil : champs éditables
-- Bouton de sauvegarde aligné à droite
+- **Bouton MODIFIER** : En haut à droite. Bascule tous les champs de la Zone 2 (Email, Contact, Site Web, Priorité et Catégories) en mode édition.
+- **Téléphone** : Toujours en lecture seule.
+- **Email / Contact** : Texte statique par défaut, input en mode édition.
+- **Site web** : Lien cliquable par défaut, input + icône globe en mode édition.
+- **Priorité** : Badge statique par défaut, slider 0-10 en mode édition.
 
 ---
 
@@ -165,8 +164,7 @@ Poste   : [Responsable RH             ]
 Email   : [b.martin@schneider.com     ]
 Tél     : [06 12 34 56 78             ]
 
-Statut  : ○ À contacter  ○ Pas répondu  ● Positif
-          ○ Négatif  ○ Ambigu  ○ Relance
+Statut  : [ Sélecteur ▾ ]  (Neutre, À contacter, Pas de réponse, Relance, En cours, Entretien, Positif, Négatif)
 
 Date contact  : [15/01/2025]
 
@@ -182,13 +180,12 @@ Date contact  : [15/01/2025]
 ---
 
 ### Zone 4 — Pied de page
-Barre horizontale pleine largeur, hauteur fixe.
+Contient les boutons de navigation vers les entreprises précédentes/suivantes. Sauvegarde automatique des données.
 
 ```
-[← Précédent]                    [💾 Sauvegarder contact]    [Suivant →]
+[← Précédent]                                           [Suivant →]
 ```
 - `[← Précédent]` aligné à gauche
-- `[💾 Sauvegarder contact]` centré
 - `[Suivant →]` aligné à droite
 - Précédent/Suivant respectent l'ordre et les filtres actifs de la liste
 
@@ -232,7 +229,7 @@ Favori            : ☐ Marquer comme favori
 
 **Pleine largeur**
 ```
-Catégories    : [tag1 ×] [tag2 ×] [Ajouter...  ]
+Catégories    : [tag1 ×] [tag2 ×] [Ajouter... (datalist) ]
 Description   : [                               ]
                [                               ]
                [                               ]

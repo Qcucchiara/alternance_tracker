@@ -31,12 +31,12 @@ Electron
 | adresse | TEXT | |
 | code_postal | TEXT | |
 | commune | TEXT | |
-| categorie | TEXT | |
-| secteur_1 | TEXT | |
-| secteur_2 | TEXT | |
-| secteur_3 | TEXT | |
-| activite_principale | TEXT | |
-| secteurs | TEXT | |
+| categorie | TEXT | (Obsolète) Ne pas utiliser |
+| secteur_1 | TEXT | (Obsolète) Ne pas utiliser |
+| secteur_2 | TEXT | (Obsolète) Ne pas utiliser |
+| secteur_3 | TEXT | (Obsolète) Ne pas utiliser |
+| activite_principale | TEXT | (Obsolète) Ne pas utiliser |
+| secteurs | TEXT | (Obsolète) Ne pas utiliser |
 | telephone | TEXT | Téléphone accueil, importé du CSV |
 | email_accueil | TEXT | Saisi manuellement |
 | contact_accueil | TEXT | Saisi manuellement |
@@ -47,7 +47,7 @@ Electron
 | responsable | TEXT | |
 | siren | TEXT | |
 | url_fiche | TEXT | |
-| categories | TEXT | |
+| categories | TEXT | Liste séparée par des tirets `-` (Unique source de catégories) |
 | priority | INTEGER | 0–10 |
 | favori | INTEGER | 0 ou 1, défaut 0 |
 | source_ajout | TEXT | `import` ou `manuel` |
@@ -69,15 +69,23 @@ Electron
 | notes | TEXT | Markdown |
 | updated_at | TEXT | datetime('now') |
 
+### Table `global_categories`
+
+| Colonne | Type | Notes |
+|---|---|---|
+| name | TEXT PK | Nom de la catégorie en MAJUSCULES |
+
 ### Hiérarchie des statuts
 
 ```
-positif            → 6
-ambigu             → 5
-relance            → 4
-tente_pas_reponse  → 3
-a_contacter        → 2
-negatif            → 1
+positif            → 8
+entretien          → 7
+en_cours           → 6
+relance            → 5
+pas_reponse        → 4
+a_contacter        → 3
+negatif            → 2
+neutre             → 1
 ```
 
 Le `best_status` d'une entreprise est le statut de rang le plus élevé parmi tous ses contacts. Il est recalculé et persisté à chaque création, modification ou suppression d'un contact.
@@ -97,11 +105,14 @@ Le `best_status` d'une entreprise est le statut de rang le plus élevé parmi to
 ### 4.2 Page Liste `/list`
 
 **Barre de recherche**
-- Recherche textuelle sur : nom, commune, secteur
+- Recherche textuelle sur : nom, commune, catégories
 
 **Filtres actifs**
-- Par statut (cases cumulables) : Favoris ★, Positif, Ambigu, Relance, À contacter, Pas répondu, Négatif
+- Par statut (sélecteur de tags) : Neutre, À contacter, Pas de réponse, Relance, En cours, Entretien, Positif, Négatif.
+- Par catégorie (sélecteur de tags).
+- Les filtres de statut et de catégorie sont cumulables (ET logique entre les deux groupes, OU logique à l'intérieur de chaque groupe).
 - Tri : Priorité (défaut), Nom, Commune, Statut
+- Favoris : Bouton de bascule ★
 
 **Tableau**
 
@@ -127,33 +138,29 @@ Le `best_status` d'une entreprise est le statut de rang le plus élevé parmi to
 **En-tête de page**
 - Bouton [← Liste]
 - Nom de l'entreprise
-- Priorité (affichage)
+- Priorité (affichage dans le header)
 - `best_status` (badge coloré)
 - Bouton [★ Favori] (toggle)
-- Lien site web si renseigné
 
-**Section Accueil** *(toujours visible, sauvegarde indépendante)*
-- Téléphone (lecture seule, importé)
-- Email accueil (éditable)
-- Contact accueil (éditable)
-- Bouton [💾 Sauver accueil]
+**Zone 2 — Bloc Infos** *(toujours visible)*
+- **Infos statiques** (gauche) : Secteurs, effectifs, commune, description (tronquée)
+- **Infos éditables** (droite) : Tél accueil (lecture seule), Email accueil, Contact accueil, Site web (cliquable), Priorité.
+- **Catégories** : Affichage des tags.
+- **Bouton [✎ MODIFIER]** : Bascule toute la zone en mode édition (permet de modifier Email, Contact, Site web, Priorité et de gérer les Catégories).
 
-**Section Infos** *(lecture seule)*
-- Secteurs, effectifs, commune, catégories, description tronquée avec [voir plus]
-
-**Section Contacts spécifiques**
+**Zone 3 — Bloc Contacts**
 - Liste des contacts existants : `Nom · Poste · Badge statut · 🗑`
 - Clic sur un contact → charge ce contact dans le formulaire ci-dessous
 - Bouton [+ Ajouter un contact] → vide le formulaire pour saisie neuve
+- Sauvegarde automatique (`onChange` debounced) de tous les champs
 
 **Formulaire contact actif**
 - Champs : Nom, Poste, Email, Téléphone
-- Statuts : radio buttons (À contacter / Pas répondu / Positif / Négatif / Ambigu / Relance)
+- Statut : Liste déroulante (select) : Neutre, À contacter, Pas de réponse, Relance, En cours, Entretien, Positif, Négatif.
 - Champ date de relance : visible uniquement si statut = Relance
 - Zone notes en markdown (`@uiw/react-md-editor`)
 
 **Pied de page**
-- Bouton [💾 Sauvegarder contact]
 - Bouton [⏭ Suivant →] et [← Précédent] — ordre selon les filtres actifs de la liste
 
 **Contrainte d'affichage**
@@ -222,7 +229,7 @@ Les deux exports portent sur **toute la base**, indépendamment des filtres acti
 - Champs du fichier source mappés vers la table `companies`
 - Les champs absents ou vides sont insérés à `NULL`
 - `source_ajout` = `import`
-- `best_status` = `a_contacter` par défaut
+- `best_status` = `neutre` par défaut
 - Import effectué au premier lancement si la table `companies` est vide
 - Le fichier source est déposé à la racine du projet sous le nom `data.csv` ou `data.json`
 
@@ -248,12 +255,14 @@ Les deux exports portent sur **toute la base**, indépendamment des filtres acti
 
 | Statut | Couleur suggérée |
 |---|---|
-| positif | vert |
-| ambigu | jaune |
-| relance | bleu |
-| tente_pas_reponse | gris |
-| a_contacter | blanc/bordure |
-| negatif | rouge |
+| positif | vert (green-500) |
+| entretien | violet (purple-500) |
+| en_cours | orange (orange-400) |
+| relance | bleu (blue-500) |
+| pas_reponse | gris (gray-600) |
+| a_contacter | blanc (white) |
+| neutre | ardoise (slate-400) |
+| negatif | rouge (red-500) |
 
 ---
 

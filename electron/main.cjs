@@ -1,9 +1,22 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+console.log('Main process starting...');
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
+const Papa = require('papaparse');
 
 let db;
+
+const STATUS_HIERARCHY = {
+    'positif': 8,
+    'entretien': 7,
+    'en_cours': 6,
+    'relance': 5,
+    'pas_reponse': 4,
+    'a_contacter': 3,
+    'negatif': 2,
+    'neutre': 1
+};
 
 function initDatabase() {
     const dbPath = path.join(app.getPath('userData'), 'alternance-tracker.db');
@@ -37,7 +50,7 @@ function initDatabase() {
       priority INTEGER DEFAULT 0,
       favori INTEGER DEFAULT 0,
       source_ajout TEXT,
-      best_status TEXT DEFAULT 'a_contacter',
+      best_status TEXT DEFAULT 'neutre',
       site_web TEXT
     );
 
@@ -55,34 +68,59 @@ function initDatabase() {
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS global_categories (
+      name TEXT PRIMARY KEY
+    );
   `);
 
-    // Migration pour s'assurer que toutes les entreprises ont un contact "Accueil"
-    const companiesWithoutAccueil = db.prepare(`
-        SELECT id, telephone, email_accueil, contact_accueil FROM companies 
-        WHERE id NOT IN (SELECT company_id FROM contacts WHERE contact_nom = 'Accueil')
-    `).all();
-
-    const insertAccueil = db.prepare(`
-        INSERT INTO contacts (company_id, contact_nom, contact_poste, contact_email, contact_telephone, status, notes)
-        VALUES (?, 'Accueil', 'Standard', ?, ?, 'a_contacter', '')
-    `);
-
-    const migrate = db.transaction((companies) => {
-        for (const c of companies) {
-            insertAccueil.run(c.id, c.email_accueil, c.telephone);
-        }
-    });
-    if (companiesWithoutAccueil.length > 0) {
-        migrate(companiesWithoutAccueil);
-        console.log(`Migrated ${companiesWithoutAccueil.length} companies to have an Accueil contact.`);
+    // Migrations
+    let userVersion = db.pragma('user_version', { simple: true });
+    
+    // Migration V2 : Nettoyage et ré-import des catégories uniquement depuis le champ 'categories' du JSON
+    if (userVersion < 2) {
+        migrateCategoriesFromJSON();
+        db.pragma('user_version = 2');
+        userVersion = 2;
     }
 
-    // Migration pour ajouter le champ site_web s'il n'existe pas
-    try {
-        db.prepare('ALTER TABLE companies ADD COLUMN site_web TEXT').run();
-    } catch (e) {
-        // Ignorer si la colonne existe déjà
+    // Migration V3 : Harmonisation des statuts et ajout de la colonne site_web
+    if (userVersion < 3) {
+        // Ajouter le champ site_web s'il n'existe pas
+        try {
+            db.prepare('ALTER TABLE companies ADD COLUMN site_web TEXT').run();
+        } catch (e) {
+            // Ignorer si la colonne existe déjà
+        }
+
+        // Harmonisation des statuts
+        db.prepare("UPDATE companies SET best_status = 'neutre' WHERE best_status = 'a_contacter'").run();
+        db.prepare("UPDATE contacts SET status = 'neutre' WHERE status = 'a_contacter' AND contact_nom = 'Accueil'").run();
+        db.prepare("UPDATE contacts SET status = 'pas_reponse' WHERE status = 'tente_pas_reponse'").run();
+
+        // Migration pour s'assurer que toutes les entreprises ont un contact "Accueil"
+        const companiesWithoutAccueil = db.prepare(`
+            SELECT id, telephone, email_accueil, contact_accueil FROM companies 
+            WHERE id NOT IN (SELECT company_id FROM contacts WHERE contact_nom = 'Accueil')
+        `).all();
+
+        const insertAccueil = db.prepare(`
+            INSERT INTO contacts (company_id, contact_nom, contact_poste, contact_email, contact_telephone, status, notes)
+            VALUES (?, 'Accueil', 'Standard', ?, ?, 'neutre', '')
+        `);
+
+        db.transaction(() => {
+            for (const c of companiesWithoutAccueil) {
+                insertAccueil.run(c.id, c.email_accueil, c.telephone);
+            }
+        })();
+
+        if (companiesWithoutAccueil.length > 0) {
+            console.log(`Migrated ${companiesWithoutAccueil.length} companies to have an Accueil contact.`);
+        }
+
+        db.pragma('user_version = 3');
+        userVersion = 3;
     }
 
     // Import initial si la table est vide
@@ -123,13 +161,13 @@ function importInitialData() {
         @secteur_1, @secteur_2, @secteur_3, @activite_principale, @secteurs,
         @telephone, @site_internet, @effectifs_inovallee, @effectifs_global,
         @responsable, @siren, @url_fiche, @categories, @priority,
-        'import', 'a_contacter', @source
+        'import', 'neutre', @source
       )
     `);
 
         const insertContact = db.prepare(`
             INSERT INTO contacts (company_id, contact_nom, contact_poste, contact_telephone, status, notes)
-            VALUES (?, 'Accueil', 'Standard', ?, 'a_contacter', '')
+            VALUES (?, 'Accueil', 'Standard', ?, 'neutre', '')
         `);
 
         const insertMany = db.transaction((companies) => {
@@ -152,6 +190,15 @@ function importInitialData() {
                     if (company[f] === undefined) company[f] = null;
                 });
 
+                // Nettoyage spécifique pour les catégories lors de l'import
+                if (company.categories === 'NONE') company.categories = '';
+                company.categorie = null;
+                company.secteurs = null;
+                company.secteur_1 = null;
+                company.secteur_2 = null;
+                company.secteur_3 = null;
+                company.activite_principale = null;
+
                 const result = insert.run(company);
                 insertContact.run(result.lastInsertRowid, company.telephone);
             }
@@ -166,24 +213,15 @@ function refreshBestStatus(companyId) {
     const contacts = db.prepare('SELECT status FROM contacts WHERE company_id = ?').all(companyId);
     
     if (contacts.length === 0) {
-        db.prepare('UPDATE companies SET best_status = "a_contacter" WHERE id = ?').run(companyId);
+        db.prepare('UPDATE companies SET best_status = "neutre" WHERE id = ?').run(companyId);
         return;
     }
 
-    const hierarchy = {
-        'positif': 6,
-        'ambigu': 5,
-        'relance': 4,
-        'tente_pas_reponse': 3,
-        'a_contacter': 2,
-        'negatif': 1
-    };
-
     let bestRank = 0;
-    let bestStatus = 'a_contacter';
+    let bestStatus = 'neutre';
 
     for (const contact of contacts) {
-        const rank = hierarchy[contact.status] || 0;
+        const rank = STATUS_HIERARCHY[contact.status] || 0;
         if (rank > bestRank) {
             bestRank = rank;
             bestStatus = contact.status;
@@ -193,13 +231,85 @@ function refreshBestStatus(companyId) {
     db.prepare('UPDATE companies SET best_status = ? WHERE id = ?').run(bestStatus, companyId);
 }
 
+function cleanupUnusedCategories() {
+    if (!db) return;
+    try {
+        const categoriesSet = new Set();
+        const rows = db.prepare("SELECT categories FROM companies").all();
+        rows.forEach(row => {
+            if (row.categories) {
+                row.categories.split('-').forEach(cat => {
+                    const clean = cat.trim().toUpperCase();
+                    if (clean) categoriesSet.add(clean);
+                });
+            }
+        });
+
+        db.transaction(() => {
+            db.prepare('DELETE FROM global_categories').run();
+            const insert = db.prepare('INSERT INTO global_categories (name) VALUES (?)');
+            categoriesSet.forEach(cat => insert.run(cat));
+        })();
+    } catch (error) {
+        console.error('Error cleaning up categories:', error);
+    }
+}
+
+function migrateCategoriesFromJSON() {
+    const projectRoot = path.join(__dirname, '..');
+    const jsonPath = path.join(projectRoot, 'merged_classified_v2.json');
+    if (!fs.existsSync(jsonPath)) {
+        console.warn('Migration V2 : merged_classified_v2.json non trouvé, passage outre.');
+        return;
+    }
+
+    console.log('Migration V2 : Ré-import des catégories depuis le JSON...');
+    try {
+        const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+        
+        // Vider les colonnes qui ne sont pas des catégories
+        db.prepare("UPDATE companies SET categorie = NULL, secteurs = NULL, secteur_1 = NULL, secteur_2 = NULL, secteur_3 = NULL, activite_principale = NULL").run();
+
+        const updateStmt = db.prepare('UPDATE companies SET categories = ? WHERE nom = ? AND commune = ?');
+        
+        db.transaction(() => {
+            for (const item of data) {
+                let cats = item.categories || '';
+                if (cats === 'NONE') cats = '';
+                updateStmt.run(cats, item.nom, item.commune);
+            }
+        })();
+        
+        cleanupUnusedCategories();
+        console.log('Migration V2 terminée avec succès.');
+    } catch (error) {
+        console.error('Erreur lors de la migration V2 :', error);
+    }
+}
+
 // IPC Handlers
+ipcMain.handle('get-all-categories', (event) => {
+    try {
+        if (!db) {
+            console.warn('Database not initialized for get-all-categories');
+            return [];
+        }
+        // Always cleanup before returning all categories to ensure consistency as requested
+        cleanupUnusedCategories();
+        const rows = db.prepare('SELECT name FROM global_categories ORDER BY name ASC').all();
+        return rows.map(r => r.name);
+    } catch (error) {
+        console.error('Error in get-all-categories handler:', error);
+        return [];
+    }
+});
+
 ipcMain.handle('get-companies', (event, filters) => {
     let query = 'SELECT * FROM companies WHERE 1=1';
     const params = {};
 
     if (filters.search) {
-        query += ' AND (nom LIKE @search OR commune LIKE @search OR secteurs LIKE @search OR categories LIKE @search)';
+        query += ' AND (nom LIKE @search OR commune LIKE @search OR categories LIKE @search)';
         params.search = `%${filters.search}%`;
     }
 
@@ -207,6 +317,13 @@ ipcMain.handle('get-companies', (event, filters) => {
         const statusPlaceholders = filters.statuses.map((_, i) => `@status${i}`).join(',');
         query += ` AND best_status IN (${statusPlaceholders})`;
         filters.statuses.forEach((s, i) => params[`status${i}`] = s);
+    }
+
+    if (filters.categories && filters.categories.length > 0) {
+        // Match exactly or with dash separators
+        const categoryClauses = filters.categories.map((_, i) => `('-' || categories || '-') LIKE @cat${i}`).join(' OR ');
+        query += ` AND (${categoryClauses})`;
+        filters.categories.forEach((c, i) => params[`cat${i}`] = `%-${c}-%`);
     }
 
     if (filters.onlyFavorites) {
@@ -239,9 +356,22 @@ ipcMain.handle('get-company', (event, id) => {
     return { ...company, contacts };
 });
 
-ipcMain.handle('update-company-accueil', (event, { id, email_accueil, contact_accueil, site_web }) => {
-    return db.prepare('UPDATE companies SET email_accueil = ?, contact_accueil = ?, site_web = ? WHERE id = ?')
-        .run(email_accueil, contact_accueil, site_web, id);
+ipcMain.handle('update-company-accueil', (event, { id, email_accueil, contact_accueil, site_web, priority, categories }) => {
+    // Update company
+    const result = db.prepare('UPDATE companies SET email_accueil = ?, contact_accueil = ?, site_web = ?, priority = ?, categories = ? WHERE id = ?')
+        .run(email_accueil, contact_accueil, site_web, priority, categories, id);
+    
+    // Update global categories
+    if (categories) {
+        const insertCat = db.prepare('INSERT OR IGNORE INTO global_categories (name) VALUES (?)');
+        db.transaction(() => {
+            categories.split('-').forEach(cat => {
+                if (cat.trim()) insertCat.run(cat.trim().toUpperCase());
+            });
+        })();
+    }
+    
+    return result;
 });
 
 ipcMain.handle('toggle-favorite', (event, { id, favori }) => {
@@ -285,6 +415,7 @@ ipcMain.handle('delete-contact', (event, { id, company_id }) => {
     return result;
 });
 
+
 ipcMain.handle('create-company', (event, company) => {
     const result = db.prepare(`
         INSERT INTO companies (
@@ -294,15 +425,25 @@ ipcMain.handle('create-company', (event, company) => {
         ) VALUES (
             @nom, @site_internet, @site_web, @adresse, @code_postal, @commune, 
             @telephone, @email_accueil, @contact_accueil, @categories, 
-            @priority, @favori, @description, 'manuel', 'a_contacter'
+            @priority, @favori, @description, 'manuel', 'neutre'
         )
     `).run(company);
 
     const companyId = result.lastInsertRowid;
     db.prepare(`
         INSERT INTO contacts (company_id, contact_nom, contact_poste, contact_email, contact_telephone, status, notes)
-        VALUES (?, 'Accueil', 'Standard', ?, ?, 'a_contacter', '')
+        VALUES (?, 'Accueil', 'Standard', ?, ?, 'neutre', '')
     `).run(companyId, company.email_accueil, company.telephone);
+
+    // Update global categories
+    if (company.categories) {
+        const insertCat = db.prepare('INSERT OR IGNORE INTO global_categories (name) VALUES (?)');
+        db.transaction(() => {
+            company.categories.split('-').forEach(cat => {
+                if (cat.trim()) insertCat.run(cat.trim().toUpperCase());
+            });
+        })();
+    }
 
     return companyId;
 });
@@ -327,7 +468,6 @@ ipcMain.handle('export-json', async (event) => {
 });
 
 ipcMain.handle('export-csv', async (event) => {
-    const hierarchy = { 'positif': 6, 'ambigu': 5, 'relance': 4, 'tente_pas_reponse': 3, 'a_contacter': 2, 'negatif': 1 };
     const companies = db.prepare('SELECT * FROM companies').all();
     const exportData = [];
 
@@ -335,8 +475,8 @@ ipcMain.handle('export-csv', async (event) => {
         const contacts = db.prepare('SELECT * FROM contacts WHERE company_id = ?').all(company.id);
         // Sort contacts by status rank then updated_at DESC
         contacts.sort((a, b) => {
-            const rankA = hierarchy[a.status] || 0;
-            const rankB = hierarchy[b.status] || 0;
+            const rankA = STATUS_HIERARCHY[a.status] || 0;
+            const rankB = STATUS_HIERARCHY[b.status] || 0;
             if (rankA !== rankB) return rankB - rankA;
             return new Date(b.updated_at) - new Date(a.updated_at);
         });
@@ -368,7 +508,6 @@ ipcMain.handle('export-csv', async (event) => {
         exportData.push(row);
     }
 
-    const Papa = require('papaparse');
     const csv = Papa.unparse(exportData);
 
     const { filePath } = await dialog.showSaveDialog({
