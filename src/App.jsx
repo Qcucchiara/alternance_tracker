@@ -216,22 +216,44 @@ const CompanyPage = () => {
 
   const [accueilForm, setAccueilForm] = useState({
     email_accueil: '',
-    contact_accueil: ''
+    contact_accueil: '',
+    site_web: ''
   });
 
   useEffect(() => {
     loadCompany();
   }, [id]);
 
-  const loadCompany = async () => {
+  const loadCompany = async (targetContactId = null) => {
     const data = await ipcRenderer.invoke('get-company', id);
     setCompany(data);
     setAccueilForm({
       email_accueil: data.email_accueil || '',
-      contact_accueil: data.contact_accueil || ''
+      contact_accueil: data.contact_accueil || '',
+      site_web: data.site_web || ''
     });
-    // Reset contact form to empty by default
-    handleAddContact();
+
+    if (targetContactId) {
+      const target = data.contacts.find(c => c.id === targetContactId);
+      if (target) {
+        handleSelectContact(target);
+        return;
+      }
+    } else if (selectedContact) {
+      const current = data.contacts.find(c => c.id === selectedContact.id);
+      if (current) {
+        handleSelectContact(current);
+        return;
+      }
+    }
+
+    // Default to Accueil contact if present
+    const accueil = data.contacts.find(c => c.contact_nom === 'Accueil');
+    if (accueil) {
+      handleSelectContact(accueil);
+    } else {
+      handleAddContact();
+    }
   };
 
   const handleAddContact = () => {
@@ -270,8 +292,9 @@ const CompanyPage = () => {
   };
 
   const handleSaveContact = async () => {
-    await ipcRenderer.invoke('save-contact', { ...contactForm, company_id: id });
-    loadCompany();
+    const result = await ipcRenderer.invoke('save-contact', { ...contactForm, company_id: id });
+    const newId = contactForm.id || result.lastInsertRowid;
+    loadCompany(newId);
   };
 
   const handleDeleteContact = async (e, contactId) => {
@@ -309,11 +332,11 @@ const CompanyPage = () => {
           <StatusBadge status={company.best_status} />
           <button onClick={toggleFavorite} className="text-2xl leading-none">
             {company.favori ? <span className="text-yellow-500">★</span> : <span className="text-gray-300">☆</span>}
-          </button>
+          </button>"
         </div>
-        {company.site_internet && (
-          <a href={company.site_internet} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 text-sm">
-            🌐 {new URL(company.site_internet).hostname}
+        {company.site_web && (
+          <a href={company.site_web} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 text-sm">
+            🌐 {new URL(company.site_web).hostname}
           </a>
         )}
       </div>
@@ -330,8 +353,24 @@ const CompanyPage = () => {
               <span key={cat} className="bg-gray-200 px-1 rounded">{cat}</span>
             ))}
           </div>
+          {company.site_internet && (
+            <p>
+              <strong>Annuaire :</strong>{' '}
+              <a href={company.site_internet} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                Lien fiche
+              </a>
+            </p>
+          )}
           <div className="mt-2 text-gray-600">
-            <strong>Description :</strong> {company.description?.slice(0, 100)}...
+            <div className="mt-2 text-gray-600">
+              <strong>Description :</strong>{' '}
+              <span
+                  className="cursor-help"
+                  title={company.description || 'Aucune description'}
+              >
+                  {company.description?.slice(0, 100) || 'Aucune description'}...
+                </span>
+            </div>
           </div>
         </div>
         <div className="w-[60%] p-4 flex flex-col justify-between">
@@ -358,6 +397,29 @@ const CompanyPage = () => {
                 onChange={e => setAccueilForm({ ...accueilForm, contact_accueil: e.target.value })}
               />
             </div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <span className="w-32">Site web :</span>
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="https://..."
+                  className="flex-1 border-b focus:border-blue-500 outline-none font-normal"
+                  value={accueilForm.site_web}
+                  onChange={e => setAccueilForm({ ...accueilForm, site_web: e.target.value })}
+                />
+                {accueilForm.site_web && (
+                  <a
+                    href={accueilForm.site_web.startsWith('http') ? accueilForm.site_web : `https://${accueilForm.site_web}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 hover:text-blue-800"
+                    title="Ouvrir le site"
+                  >
+                    🌐
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
           <button onClick={handleSaveAccueil} className="self-end bg-gray-800 text-white px-3 py-1 rounded text-xs">
             💾 Sauver accueil
@@ -380,7 +442,9 @@ const CompanyPage = () => {
                   <div className="text-xs text-gray-500">{c.contact_poste}</div>
                   <StatusBadge status={c.status} />
                 </div>
-                <button onClick={e => handleDeleteContact(e, c.id)} className="text-red-400 opacity-0 group-hover:opacity-100 px-1">🗑</button>
+                {c.contact_nom !== 'Accueil' && (
+                  <button onClick={e => handleDeleteContact(e, c.id)} className="text-red-400 opacity-0 group-hover:opacity-100 px-1">🗑</button>
+                )}
               </div>
             ))}
           </div>
@@ -492,6 +556,7 @@ const NewCompanyPage = () => {
   const [form, setForm] = useState({
     nom: '',
     site_internet: '',
+    site_web: '',
     adresse: '',
     code_postal: '',
     commune: '',
@@ -538,7 +603,17 @@ const NewCompanyPage = () => {
               <label className="block text-sm font-medium mb-1">Site web</label>
               <input
                 type="text"
+                placeholder="https://www.entreprise.com"
                 className="w-full border px-3 py-2 rounded"
+                value={form.site_web}
+                onChange={e => setForm({ ...form, site_web: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-400 italic">Lien annuaire (Inovallée, etc.)</label>
+              <input
+                type="text"
+                className="w-full border px-3 py-2 rounded bg-gray-50 text-xs"
                 value={form.site_internet}
                 onChange={e => setForm({ ...form, site_internet: e.target.value })}
               />

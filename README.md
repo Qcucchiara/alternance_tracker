@@ -28,6 +28,38 @@ Application desktop locale pour organiser une campagne de recherche d'alternance
    pnpm build
    ```
 
+## 📦 Packaging et Installation (Linux)
+
+L'application utilise `electron-builder` pour générer des paquets installables.
+
+### 1. Prérequis
+Assurez-vous d'avoir les outils de build nécessaires pour `better-sqlite3` (dépendance native) :
+```bash
+sudo apt-get install build-essential python3
+```
+
+### 2. Builder l'application
+Pour générer l'exécutable et le paquet pour Linux :
+```bash
+pnpm build
+```
+
+### 3. Installer et Lancer
+Après le build, les fichiers se trouvent dans le dossier `dist/` :
+
+- **AppImage** (Recommandé) :
+  - Rendez le fichier exécutable : `chmod +x dist/alternance-tracker-*.AppImage`
+  - Lancez-le : `./dist/alternance-tracker-*.AppImage`
+- **Paquet .deb** (Debian/Ubuntu) :
+  - Installez-le : `sudo dpkg -i dist/alternance-tracker-*.deb`
+  - Lancez l'application depuis votre menu d'applications.
+
+### ⚠️ Note sur SQLite
+Si vous rencontrez une erreur liée à `better-sqlite3` au lancement de l'application packagée, forcez la reconstruction du module natif :
+```bash
+pnpm exec electron-rebuild
+```
+
 ## 📈 Avancée du Développement (Features)
 
 L'application a été développée selon le découpage suivant :

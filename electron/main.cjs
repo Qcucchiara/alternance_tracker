@@ -37,7 +37,8 @@ function initDatabase() {
       priority INTEGER DEFAULT 0,
       favori INTEGER DEFAULT 0,
       source_ajout TEXT,
-      best_status TEXT DEFAULT 'a_contacter'
+      best_status TEXT DEFAULT 'a_contacter',
+      site_web TEXT
     );
 
     CREATE TABLE IF NOT EXISTS contacts (
@@ -55,6 +56,34 @@ function initDatabase() {
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
     );
   `);
+
+    // Migration pour s'assurer que toutes les entreprises ont un contact "Accueil"
+    const companiesWithoutAccueil = db.prepare(`
+        SELECT id, telephone, email_accueil, contact_accueil FROM companies 
+        WHERE id NOT IN (SELECT company_id FROM contacts WHERE contact_nom = 'Accueil')
+    `).all();
+
+    const insertAccueil = db.prepare(`
+        INSERT INTO contacts (company_id, contact_nom, contact_poste, contact_email, contact_telephone, status, notes)
+        VALUES (?, 'Accueil', 'Standard', ?, ?, 'a_contacter', '')
+    `);
+
+    const migrate = db.transaction((companies) => {
+        for (const c of companies) {
+            insertAccueil.run(c.id, c.email_accueil, c.telephone);
+        }
+    });
+    if (companiesWithoutAccueil.length > 0) {
+        migrate(companiesWithoutAccueil);
+        console.log(`Migrated ${companiesWithoutAccueil.length} companies to have an Accueil contact.`);
+    }
+
+    // Migration pour ajouter le champ site_web s'il n'existe pas
+    try {
+        db.prepare('ALTER TABLE companies ADD COLUMN site_web TEXT').run();
+    } catch (e) {
+        // Ignorer si la colonne existe déjà
+    }
 
     // Import initial si la table est vide
     const count = db.prepare('SELECT COUNT(*) as count FROM companies').get().count;
@@ -98,6 +127,11 @@ function importInitialData() {
       )
     `);
 
+        const insertContact = db.prepare(`
+            INSERT INTO contacts (company_id, contact_nom, contact_poste, contact_telephone, status, notes)
+            VALUES (?, 'Accueil', 'Standard', ?, 'a_contacter', '')
+        `);
+
         const insertMany = db.transaction((companies) => {
             for (const company of companies) {
                 // Ensure priority is an integer
@@ -118,7 +152,8 @@ function importInitialData() {
                     if (company[f] === undefined) company[f] = null;
                 });
 
-                insert.run(company);
+                const result = insert.run(company);
+                insertContact.run(result.lastInsertRowid, company.telephone);
             }
         });
 
@@ -196,13 +231,17 @@ ipcMain.handle('get-companies', (event, filters) => {
 
 ipcMain.handle('get-company', (event, id) => {
     const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(id);
-    const contacts = db.prepare('SELECT * FROM contacts WHERE company_id = ? ORDER BY updated_at DESC').all(id);
+    const contacts = db.prepare(`
+        SELECT * FROM contacts 
+        WHERE company_id = ? 
+        ORDER BY CASE WHEN contact_nom = 'Accueil' THEN 0 ELSE 1 END, updated_at DESC
+    `).all(id);
     return { ...company, contacts };
 });
 
-ipcMain.handle('update-company-accueil', (event, { id, email_accueil, contact_accueil }) => {
-    return db.prepare('UPDATE companies SET email_accueil = ?, contact_accueil = ? WHERE id = ?')
-        .run(email_accueil, contact_accueil, id);
+ipcMain.handle('update-company-accueil', (event, { id, email_accueil, contact_accueil, site_web }) => {
+    return db.prepare('UPDATE companies SET email_accueil = ?, contact_accueil = ?, site_web = ? WHERE id = ?')
+        .run(email_accueil, contact_accueil, site_web, id);
 });
 
 ipcMain.handle('toggle-favorite', (event, { id, favori }) => {
@@ -249,16 +288,23 @@ ipcMain.handle('delete-contact', (event, { id, company_id }) => {
 ipcMain.handle('create-company', (event, company) => {
     const result = db.prepare(`
         INSERT INTO companies (
-            nom, site_internet, adresse, code_postal, commune, 
+            nom, site_internet, site_web, adresse, code_postal, commune, 
             telephone, email_accueil, contact_accueil, categories, 
             priority, favori, description, source_ajout, best_status
         ) VALUES (
-            @nom, @site_internet, @adresse, @code_postal, @commune, 
+            @nom, @site_internet, @site_web, @adresse, @code_postal, @commune, 
             @telephone, @email_accueil, @contact_accueil, @categories, 
             @priority, @favori, @description, 'manuel', 'a_contacter'
         )
     `).run(company);
-    return result.lastInsertRowid;
+
+    const companyId = result.lastInsertRowid;
+    db.prepare(`
+        INSERT INTO contacts (company_id, contact_nom, contact_poste, contact_email, contact_telephone, status, notes)
+        VALUES (?, 'Accueil', 'Standard', ?, ?, 'a_contacter', '')
+    `).run(companyId, company.email_accueil, company.telephone);
+
+    return companyId;
 });
 
 ipcMain.handle('export-json', async (event) => {
@@ -302,6 +348,7 @@ ipcMain.handle('export-csv', async (event) => {
             email_accueil: company.email_accueil,
             contact_accueil: company.contact_accueil,
             site_internet: company.site_internet,
+            site_web: company.site_web,
             categories: company.categories,
             priority: company.priority,
             favori: company.favori,
