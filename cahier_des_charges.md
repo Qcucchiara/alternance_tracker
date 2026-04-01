@@ -223,15 +223,13 @@ Les deux exports portent sur **toute la base**, indépendamment des filtres acti
 
 ---
 
-## 6. Import initial
+## 6. Import manuel
 
-- Formats acceptés : CSV ou JSON
-- Champs du fichier source mappés vers la table `companies`
-- Les champs absents ou vides sont insérés à `NULL`
+- Formats acceptés : CSV ou JSON (du même type que les exports)
+- Via le bouton **[⬆ Import]** dans le header
 - `source_ajout` = `import`
-- `best_status` = `neutre` par défaut
-- Import effectué au premier lancement si la table `companies` est vide
-- Le fichier source est déposé à la racine du projet sous le nom `data.csv` ou `data.json`
+- Les données sont ajoutées à la base existante
+- Recalcul automatique des catégories globales après import
 
 ---
 

@@ -196,6 +196,16 @@ const Layout = ({children}) => {
     await ipcRenderer.invoke('export-csv');
   };
 
+  const handleImportData = async () => {
+    const result = await ipcRenderer.invoke('import-data');
+    if (result && result.success) {
+      alert(`Import réussi : ${result.count} entreprises importées.`);
+      window.location.reload();
+    } else if (result && result.error) {
+      alert(`Erreur lors de l'import : ${result.error}`);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       <header className="bg-white border-b px-4 py-2 flex justify-between items-center shrink-0">
@@ -204,6 +214,10 @@ const Layout = ({children}) => {
           <button onClick={() => navigate('/company/new')}
                   className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">
             + Entreprise
+          </button>
+          <button onClick={handleImportData}
+                  className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm">
+            ⬆ Import
           </button>
           <button onClick={handleExportJSON}
                   className="bg-gray-100 text-gray-700 px-3 py-1 rounded hover:bg-gray-200 text-sm">

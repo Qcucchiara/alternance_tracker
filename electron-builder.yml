@@ -9,7 +9,6 @@ directories:
 files:
   - dist/**/*
   - electron/**/*
-  - merged_classified_v2.json
   - package.json
 
 asar: true

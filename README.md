@@ -89,7 +89,7 @@ L'application a été développée selon le découpage suivant :
 ### 1. Infrastructure & Données ✅
 - Initialisation du projet (Electron + React + Vite).
 - Schéma de base de données SQLite (tables `companies` et `contacts`).
-- Script d'import initial automatique depuis `merged_classified_v2.json`.
+- Import manuel de données depuis des fichiers JSON ou CSV via le bouton **[⬆ Import]**.
 
 ### 2. Navigation & Liste ✅
 - Layout global (Header fixe).

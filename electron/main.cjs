@@ -84,13 +84,6 @@ function initDatabase() {
     // Migrations
     let userVersion = db.pragma('user_version', { simple: true });
     
-    // Migration V2 : Nettoyage et ré-import des catégories uniquement depuis le champ 'categories' du JSON
-    if (userVersion < 2) {
-        migrateCategoriesFromJSON();
-        db.pragma('user_version = 2');
-        userVersion = 2;
-    }
-
     // Migration V3 : Harmonisation des statuts et ajout de la colonne site_web
     if (userVersion < 3) {
         // Ajouter le champ site_web s'il n'existe pas
@@ -129,92 +122,8 @@ function initDatabase() {
         db.pragma('user_version = 3');
         userVersion = 3;
     }
-
-    // Import initial si la table est vide
-    const count = db.prepare('SELECT COUNT(*) as count FROM companies').get().count;
-    if (count === 0) {
-        importInitialData();
-    }
 }
 
-function importInitialData() {
-    const projectRoot = path.join(__dirname, '..');
-    const jsonPath = path.join(projectRoot, 'merged_classified_v2.json');
-    const csvPath = path.join(projectRoot, 'data.csv');
-    const dataJsonPath = path.join(projectRoot, 'data.json');
-
-    let data = [];
-    if (fs.existsSync(jsonPath)) {
-        data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-    } else if (fs.existsSync(dataJsonPath)) {
-        data = JSON.parse(fs.readFileSync(dataJsonPath, 'utf8'));
-    } else if (fs.existsSync(csvPath)) {
-        const Papa = require('papaparse');
-        const csvFile = fs.readFileSync(csvPath, 'utf8');
-        const results = Papa.parse(csvFile, { header: true, dynamicTyping: true });
-        data = results.data;
-    }
-
-    if (data.length > 0) {
-        const insert = db.prepare(`
-      INSERT INTO companies (
-        nom, description, adresse, code_postal, commune, categorie,
-        secteur_1, secteur_2, secteur_3, activite_principale, secteurs,
-        telephone, site_internet, effectifs_inovallee, effectifs_global,
-        responsable, siren, url_fiche, categories, priority,
-        source_ajout, best_status, source
-      ) VALUES (
-        @nom, @description, @adresse, @code_postal, @commune, @categorie,
-        @secteur_1, @secteur_2, @secteur_3, @activite_principale, @secteurs,
-        @telephone, @site_internet, @effectifs_inovallee, @effectifs_global,
-        @responsable, @siren, @url_fiche, @categories, @priority,
-        'import', 'neutre', @source
-      )
-    `);
-
-        const insertContact = db.prepare(`
-            INSERT INTO contacts (company_id, contact_nom, contact_poste, contact_telephone, status, notes)
-            VALUES (?, 'Accueil', 'Standard', ?, 'neutre', '')
-        `);
-
-        const insertMany = db.transaction((companies) => {
-            for (const company of companies) {
-                // Ensure priority is an integer
-                if (company.priority === undefined || company.priority === null) {
-                    company.priority = 0;
-                } else {
-                    company.priority = parseInt(company.priority) || 0;
-                }
-                
-                // Set default values for missing fields to NULL
-                const fields = [
-                    'nom', 'description', 'adresse', 'code_postal', 'commune', 'categorie',
-                    'secteur_1', 'secteur_2', 'secteur_3', 'activite_principale', 'secteurs',
-                    'telephone', 'site_internet', 'effectifs_inovallee', 'effectifs_global',
-                    'responsable', 'siren', 'url_fiche', 'categories', 'source'
-                ];
-                fields.forEach(f => {
-                    if (company[f] === undefined) company[f] = null;
-                });
-
-                // Nettoyage spécifique pour les catégories lors de l'import
-                if (company.categories === 'NONE') company.categories = '';
-                company.categorie = null;
-                company.secteurs = null;
-                company.secteur_1 = null;
-                company.secteur_2 = null;
-                company.secteur_3 = null;
-                company.activite_principale = null;
-
-                const result = insert.run(company);
-                insertContact.run(result.lastInsertRowid, company.telephone);
-            }
-        });
-
-        insertMany(data);
-        console.log(`Imported ${data.length} companies.`);
-    }
-}
 
 function refreshBestStatus(companyId) {
     const contacts = db.prepare('SELECT status FROM contacts WHERE company_id = ?').all(companyId);
@@ -262,37 +171,6 @@ function cleanupUnusedCategories() {
     }
 }
 
-function migrateCategoriesFromJSON() {
-    const projectRoot = path.join(__dirname, '..');
-    const jsonPath = path.join(projectRoot, 'merged_classified_v2.json');
-    if (!fs.existsSync(jsonPath)) {
-        console.warn('Migration V2 : merged_classified_v2.json non trouvé, passage outre.');
-        return;
-    }
-
-    console.log('Migration V2 : Ré-import des catégories depuis le JSON...');
-    try {
-        const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-        
-        // Vider les colonnes qui ne sont pas des catégories
-        db.prepare("UPDATE companies SET categorie = NULL, secteurs = NULL, secteur_1 = NULL, secteur_2 = NULL, secteur_3 = NULL, activite_principale = NULL").run();
-
-        const updateStmt = db.prepare('UPDATE companies SET categories = ? WHERE nom = ? AND commune = ?');
-        
-        db.transaction(() => {
-            for (const item of data) {
-                let cats = item.categories || '';
-                if (cats === 'NONE') cats = '';
-                updateStmt.run(cats, item.nom, item.commune);
-            }
-        })();
-        
-        cleanupUnusedCategories();
-        console.log('Migration V2 terminée avec succès.');
-    } catch (error) {
-        console.error('Erreur lors de la migration V2 :', error);
-    }
-}
 
 // IPC Handlers
 ipcMain.handle('get-all-categories', (event) => {
@@ -516,6 +394,9 @@ ipcMain.handle('export-csv', async (event) => {
 
         const row = {
             nom: company.nom,
+            description: company.description,
+            adresse: company.adresse,
+            code_postal: company.code_postal,
             commune: company.commune,
             telephone: company.telephone,
             email_accueil: company.email_accueil,
@@ -525,7 +406,10 @@ ipcMain.handle('export-csv', async (event) => {
             categories: company.categories,
             priority: company.priority,
             favori: company.favori,
-            best_status: company.best_status
+            best_status: company.best_status,
+            secteurs: company.secteurs,
+            effectifs_global: company.effectifs_global,
+            effectifs_inovallee: company.effectifs_inovallee
         };
 
         for (let i = 1; i <= 2; i++) {
@@ -554,6 +438,126 @@ ipcMain.handle('export-csv', async (event) => {
         return true;
     }
     return false;
+});
+
+ipcMain.handle('import-data', async (event) => {
+    const { filePaths } = await dialog.showOpenDialog({
+        title: 'Importer des données',
+        filters: [
+            { name: 'Données (JSON, CSV)', extensions: ['json', 'csv'] }
+        ],
+        properties: ['openFile']
+    });
+
+    if (!filePaths || filePaths.length === 0) return { success: false };
+
+    const filePath = filePaths[0];
+    const extension = path.extname(filePath).toLowerCase();
+    const content = fs.readFileSync(filePath, 'utf8');
+
+    let companies = [];
+    try {
+        if (extension === '.json') {
+            companies = JSON.parse(content);
+        } else if (extension === '.csv') {
+            const results = Papa.parse(content, { header: true, dynamicTyping: true });
+            companies = results.data.map(row => {
+                if (!row.nom) return null;
+                const company = { ...row };
+                company.contacts = [];
+                for (let i = 1; i <= 10; i++) {
+                    if (row[`c${i}_nom`]) {
+                        company.contacts.push({
+                            contact_nom: row[`c${i}_nom`],
+                            contact_poste: row[`c${i}_poste`],
+                            contact_email: row[`c${i}_email`],
+                            contact_telephone: row[`c${i}_tel`],
+                            status: row[`c${i}_status`],
+                            date_contact: row[`c${i}_date`],
+                            notes: row[`c${i}_notes`]
+                        });
+                    } else if (i > 2) break;
+                }
+                return company;
+            }).filter(c => c !== null);
+        }
+
+        if (companies.length === 0) return { success: false, message: 'Aucune donnée trouvée' };
+
+        const insertCompany = db.prepare(`
+            INSERT INTO companies (
+                nom, description, adresse, code_postal, commune, telephone, 
+                email_accueil, contact_accueil, site_internet, site_web, 
+                categories, priority, favori, best_status, secteurs, 
+                effectifs_global, effectifs_inovallee, source_ajout
+            ) VALUES (
+                @nom, @description, @adresse, @code_postal, @commune, @telephone, 
+                @email_accueil, @contact_accueil, @site_internet, @site_web, 
+                @categories, @priority, @favori, @best_status, @secteurs, 
+                @effectifs_global, @effectifs_inovallee, 'import'
+            )
+        `);
+
+        const insertContact = db.prepare(`
+            INSERT INTO contacts (
+                company_id, contact_nom, contact_poste, contact_email, 
+                contact_telephone, status, date_contact, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        db.transaction(() => {
+            for (const company of companies) {
+                const res = insertCompany.run({
+                    nom: company.nom,
+                    description: company.description || null,
+                    adresse: company.adresse || null,
+                    code_postal: company.code_postal || null,
+                    commune: company.commune || null,
+                    telephone: company.telephone || null,
+                    email_accueil: company.email_accueil || null,
+                    contact_accueil: company.contact_accueil || null,
+                    site_internet: company.site_internet || null,
+                    site_web: company.site_web || null,
+                    categories: company.categories || '',
+                    priority: parseInt(company.priority) || 0,
+                    favori: parseInt(company.favori) || 0,
+                    best_status: company.best_status || 'neutre',
+                    secteurs: company.secteurs || null,
+                    effectifs_global: company.effectifs_global || null,
+                    effectifs_inovallee: company.effectifs_inovallee || null
+                });
+                const companyId = res.lastInsertRowid;
+
+                if (company.contacts && Array.isArray(company.contacts)) {
+                    for (const contact of company.contacts) {
+                        insertContact.run(
+                            companyId,
+                            contact.contact_nom || 'Contact',
+                            contact.contact_poste || '',
+                            contact.contact_email || '',
+                            contact.contact_telephone || '',
+                            contact.status || 'neutre',
+                            contact.date_contact || null,
+                            contact.notes || ''
+                        );
+                    }
+                }
+
+                const hasAccueil = company.contacts && company.contacts.some(c => c.contact_nom === 'Accueil');
+                if (!hasAccueil && (company.telephone || company.email_accueil)) {
+                    insertContact.run(companyId, 'Accueil', 'Standard', '', company.telephone || '', 'neutre', null, '');
+                }
+
+                refreshBestStatus(companyId);
+            }
+        })();
+
+        cleanupUnusedCategories();
+        return { success: true, count: companies.length };
+    } catch (err) {
+        console.error('Import error:', err);
+        return { success: false, error: err.message };
+    }
 });
 
 function createWindow() {
